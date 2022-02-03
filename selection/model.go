@@ -180,6 +180,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case keyMatches(msg, m.KeyMap.Abort):
 			m.Err = promptkit.ErrAborted
 			m.quitting = true
+			m.Err = fmt.Errorf("prompt aborted...3b")
+
+			if m.AbortFunc != nil {
+				m.Err = m.AbortFunc()
+			}
 
 			return m, tea.Quit
 		case keyMatches(msg, m.KeyMap.Select):

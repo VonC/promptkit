@@ -201,6 +201,10 @@ type Selection struct {
 	// ColorProfile determines how colors are rendered. By default, the terminal
 	// is queried.
 	ColorProfile termenv.Profile
+
+	// AbortFunc is a function executed when Abort Key is pressed.
+	// By default, no function is called
+	AbortFunc func() error
 }
 
 // New creates a new selection prompt.
