@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"text/template"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -34,7 +35,8 @@ type Model struct {
 	tmpl         *template.Template
 	resultTmpl   *template.Template
 
-	quitting bool
+	quitting  bool
+	doubleKey time.Time
 }
 
 // ensure that the Model interface is implemented.
@@ -43,7 +45,10 @@ var _ tea.Model = &Model{}
 // NewModel returns a new selection prompt model for the
 // provided choices.
 func NewModel(selection *Selection) *Model {
-	return &Model{Selection: selection}
+	return &Model{
+		Selection: selection,
+		doubleKey: zeroTime,
+	}
 }
 
 // Init initializes the selection prompt model.
@@ -168,25 +173,59 @@ func (m *Model) Value() (*Choice, error) {
 	return m.currentChoices[m.currentIdx], nil
 }
 
+var zeroTime = time.Time{}
+
+func (m *Model) isKeyMatchesAbort(msg tea.KeyMsg) bool {
+	if !keyMatches(msg, m.KeyMap.Abort) {
+		return false
+	}
+	found := false
+	for _, k := range m.KeyMap.ClearFilter {
+		if msg.String() == k {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return true
+	}
+	if m.doubleKey == zeroTime {
+		m.doubleKey = time.Now()
+		return false
+	} else {
+		elapsed := time.Since(m.doubleKey)
+		if elapsed.Milliseconds() < 500 {
+			m.doubleKey = zeroTime
+			return true
+		}
+	}
+	m.doubleKey = zeroTime
+	return false
+}
+
 // Update updates the model based on the received message.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.Err != nil {
 		return m, tea.Quit
 	}
 
+	msgKey, ok := msg.(tea.KeyMsg)
+	if ok && m.isKeyMatchesAbort(msgKey) {
+		m.Err = promptkit.ErrAborted
+		m.quitting = true
+		m.Err = fmt.Errorf("prompt aborted...3b")
+
+		if m.AbortFunc != nil {
+			m.Err = m.AbortFunc()
+		}
+
+		return m, tea.Quit
+
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
-		case keyMatches(msg, m.KeyMap.Abort):
-			m.Err = promptkit.ErrAborted
-			m.quitting = true
-			m.Err = fmt.Errorf("prompt aborted...3b")
-
-			if m.AbortFunc != nil {
-				m.Err = m.AbortFunc()
-			}
-
-			return m, tea.Quit
 		case keyMatches(msg, m.KeyMap.Select):
 			if len(m.currentChoices) == 0 {
 				return m, nil
